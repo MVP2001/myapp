@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
+        "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -32,6 +33,10 @@ func main() {
 
 	app.Use(recover.New())
 	app.Use(logger.New())
+
+// Prometheus metrics endpoint
+	app.Get("/metrics", func(c *fiber.Ctx) error {
+		return c.Status(200).SendString("metrics will be here")
 
 	handlers.RegisterHealthHandlers(app)
 	handlers.RegisterTaskHandlers(app, db)
@@ -55,7 +60,6 @@ func main() {
 		port = "3000"
 	}
 
-	// 🔥 ИСПРАВЛЕНО: правильная конкатенация с двоеточием
 	address := host + ":" + port
 	log.Printf("Server starting on %s", address)
 	if err := app.Listen(address); err != nil {
