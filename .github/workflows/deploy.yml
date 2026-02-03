@@ -1,0 +1,27 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and deploy
+        run: |
+          cd ~/myapp
+          git pull origin main
+          docker compose down
+          docker compose up -d --build
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f https://app.mvp2001.ru/health || exit 1
