@@ -143,7 +143,38 @@ services:
       - "traefik.enable=false"
     restart: unless-stopped
 
-# 🔥 ИСПРАВЛЕНО: только ОДНА секция networks и volumes в конце
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki:/etc/loki
+      - loki_data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - backend
+    labels:
+      - "traefik.enable=false"
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - ./monitoring/promtail:/etc/promtail
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    networks:
+      - backend
+    depends_on:
+      - loki
+    labels:
+      - "traefik.enable=false"
+    restart: unless-stopped
+
+
 networks:
   backend:
     driver: bridge
@@ -153,3 +184,4 @@ volumes:
   letsencrypt:
   prometheus_data:
   grafana_data:
+  loki_data:
