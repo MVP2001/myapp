@@ -148,8 +148,8 @@ services:
 volumes:
   postgres_data:
   letsencrypt:
-  prometheus_data:   # ← добавил
-  grafana_data:      # ← добавил
+  prometheus_data:
+  grafana_data:
 
 networks:
   backend:

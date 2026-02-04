@@ -14,7 +14,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-        "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -34,9 +33,10 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 
-// Prometheus metrics endpoint
+	// 🔥 ИСПРАВЛЕНО: добавлена закрывающая скобка и фигурная скобка
 	app.Get("/metrics", func(c *fiber.Ctx) error {
 		return c.Status(200).SendString("metrics will be here")
+	})
 
 	handlers.RegisterHealthHandlers(app)
 	handlers.RegisterTaskHandlers(app, db)
