@@ -73,16 +73,6 @@ services:
       - "traefik.http.services.app.loadbalancer.server.port=3000"
     restart: unless-stopped
 
-volumes:
-  postgres_data:
-  letsencrypt:
-  prometheus_data:
-  grafana_data:
-
-networks:
-  backend:
-    driver: bridge
-
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: prometheus
@@ -154,3 +144,13 @@ networks:
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
+
+volumes:
+  postgres_data:
+  letsencrypt:
+  prometheus_data:   # ← добавил
+  grafana_data:      # ← добавил
+
+networks:
+  backend:
+   driver: bridge
