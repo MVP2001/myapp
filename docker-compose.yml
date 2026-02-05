@@ -5,6 +5,7 @@ services:
     command:
       - "--api.dashboard=true"
       - "--providers.docker=true"
+      - "--providers.docker.network=myapp_backend"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
@@ -25,7 +26,6 @@ services:
       - "traefik.http.routers.traefik.rule=Host(`traefik.mvp2001.ru`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      # УБРАЛ: - "traefik.http.routers.traefik.middlewares=auth@file"  (файла нет)
     restart: unless-stopped
 
   postgres:
@@ -49,9 +49,7 @@ services:
 
   app:
     build: ./app
-    container_name: devops-app
-    ports:
-      - "127.0.0.1:3000:3000"
+    container_name: test-app
     environment:
       PORT: 3000
       HOST: 0.0.0.0
@@ -68,6 +66,7 @@ services:
       - "traefik.http.routers.app.entrypoints=websecure"
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=3000"
+      - "traefik.docker.network=myapp_backend"
     restart: unless-stopped
 
   prometheus:
@@ -197,6 +196,7 @@ services:
 
 networks:
   backend:
+    name: myapp_backend
     driver: bridge
 
 volumes:
