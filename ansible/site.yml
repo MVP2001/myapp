@@ -1,0 +1,8 @@
+---
+- name: Configure myapp server
+  hosts: production
+  become: yes
+  roles:
+    - common
+    - docker
+    - app
