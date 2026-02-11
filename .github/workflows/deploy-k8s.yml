@@ -1,0 +1,34 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: true
+          tags: ghcr.io/mvp2001/myapp:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: self-hosted  # или ubuntu-latest с kubeconfig
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Update image tag
+        run: |
+          cd k8s/overlays/prod
+          kustomize edit set image myapp=ghcr.io/mvp2001/myapp:${{ github.sha }}
+      
+      - name: Deploy to K8s
+        run: |
+          kubectl apply -k k8s/overlays/prod
+          kubectl rollout status deployment/myapp -n myapp

@@ -36,3 +36,4 @@ postgres_data/
 # Logs
 logs/
 *.log
+.vault_pass

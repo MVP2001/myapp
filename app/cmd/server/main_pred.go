@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"test-app/internal/database"
 	"test-app/internal/handlers"
@@ -16,51 +14,10 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
-
-func initTracer() func() {
-	ctx := context.Background()
-
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint("jaeger:4318"),
-		otlptracehttp.WithInsecure(),
-	)
-	if err != nil {
-		log.Printf("Failed to create exporter: %v", err)
-		return func() {}
-	}
-
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName("myapp"),
-			attribute.String("environment", "production"),
-		)),
-	)
-	otel.SetTracerProvider(tp)
-
-	return func() {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer: %v", err)
-		}
-	}
-}
 
 func main() {
 	godotenv.Load()
-
-	// Инициализация трейсинга
-	cleanup := initTracer()
-	defer cleanup()
 
 	db, err := database.Connect()
 	if err != nil {
@@ -76,7 +33,7 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 
-	// Метрики endpoint
+	// 🔥 ИСПРАВЛЕНО: добавлена закрывающая скобка и фигурная скобка
 	app.Get("/metrics", func(c *fiber.Ctx) error {
 		return c.Status(200).SendString("metrics will be here")
 	})
