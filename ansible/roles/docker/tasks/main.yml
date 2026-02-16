@@ -17,6 +17,7 @@
       - containerd.io
       - docker-compose-plugin
     state: present
+    update_cache: yes
 
 - name: Add user to docker group
   user:
@@ -24,8 +25,14 @@
     groups: docker
     append: yes
 
-- name: Start Docker service
-  service:
+- name: Enable Docker service
+  systemd:
     name: docker
-    state: started
     enabled: yes
+    state: started
+
+- name: Install Docker Compose
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+    dest: /usr/local/bin/docker-compose
+    mode: '0755'

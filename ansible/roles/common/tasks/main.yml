@@ -4,43 +4,30 @@
     update_cache: yes
     cache_valid_time: 3600
 
-- name: Install required packages
+- name: Install common packages
   apt:
     name:
+      - apt-transport-https
+      - ca-certificates
       - curl
-      - wget
-      - git
-      - vim
+      - gnupg
+      - lsb-release
+      - software-properties-common
       - htop
-      - ufw
-      - fail2ban
-      - python3
+      - vim
+      - git
+      - make
       - python3-pip
     state: present
 
-- name: Configure UFW
-  ufw:
-    rule: allow
-    port: "{{ item }}"
-    proto: tcp
-  loop:
-    - "22"
-    - "80"
-    - "443"
+- name: Configure timezone
+  timezone:
+    name: UTC
 
-- name: Enable UFW
-  ufw:
-    state: enabled
-    policy: deny
-
-- name: Configure fail2ban
-  template:
-    src: jail.local.j2
-    dest: /etc/fail2ban/jail.local
-  notify: restart fail2ban
-
-- name: Start fail2ban
-  service:
-    name: fail2ban
-    state: started
-    enabled: yes
+- name: Create app user
+  user:
+    name: "{{ app_name }}"
+    system: yes
+    shell: /bin/false
+    home: "{{ app_dir }}"
+    create_home: yes

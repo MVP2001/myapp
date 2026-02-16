@@ -1,48 +1,58 @@
 ---
-- name: Ensure app directory exists
+- name: Create app directories
   file:
-    path: "{{ app_dir }}"
+    path: "{{ item }}"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-
-- name: Clone repository
-  git:
-    repo: https://github.com/MVP2001/myapp.git
-    dest: "{{ app_dir }}"
-    version: main
-  become: yes
-  become_user: "{{ ansible_user }}"
-
-- name: Create monitoring directories
-  file:
-    path: "{{ app_dir }}/{{ item }}"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ app_name }}"
+    group: "{{ app_name }}"
+    mode: '0755'
   loop:
-    - monitoring/prometheus
-    - monitoring/grafana
-    - monitoring/loki
-    - monitoring/promtail
-    - letsencrypt
+    - "{{ app_dir }}"
+    - "{{ data_dir }}"
+    - "{{ app_dir }}/letsencrypt"
+    - "{{ app_dir }}/monitoring"
 
-- name: Template docker-compose.yml
+- name: Copy Docker Compose file
   template:
     src: docker-compose.yml.j2
     dest: "{{ app_dir }}/docker-compose.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+  notify: restart app
 
-- name: Template Prometheus config
+- name: Copy environment file
   template:
-    src: prometheus.yml.j2
-    dest: "{{ app_dir }}/monitoring/prometheus/prometheus.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    src: .env.j2
+    dest: "{{ app_dir }}/.env"
+    mode: '0600'
+  notify: restart app
+
+- name: Copy monitoring configs
+  copy:
+    src: "{{ item }}"
+    dest: "{{ app_dir }}/"
+    owner: "{{ app_name }}"
+    group: "{{ app_name }}"
+  loop:
+    - monitoring/
+    - traefik/
+  notify: restart app
+
+- name: Pull latest images
+  command: 
+    cmd: docker-compose pull
+    chdir: "{{ app_dir }}"
+  changed_when: true
 
 - name: Start application
-  shell: |
-    cd {{ app_dir }} && docker compose up -d
-  become: yes
-  become_user: "{{ ansible_user }}"
+  command:
+    cmd: docker-compose up -d
+    chdir: "{{ app_dir }}"
+  changed_when: true
+
+- name: Wait for health check
+  uri:
+    url: "http://localhost:{{ app_port }}/health"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 5

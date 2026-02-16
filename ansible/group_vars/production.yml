@@ -1,0 +1,13 @@
+---
+# Production specific
+letsencrypt_email: m.podorets@yandex.ru
+domain: mvp2001.ru
+
+# Security
+vault_mode: production
+vault_unseal: true
+
+# Resources
+postgres_memory_limit: 1g
+app_memory_limit: 512m
+prometheus_retention: 15d

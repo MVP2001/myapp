@@ -1,17 +1,19 @@
 ---
-# Common settings
-app_name: myapp
-app_dir: "/home/{{ ansible_user }}/myapp"
-domain: mvp2001.ru
-
-# Docker
+# Common variables
 docker_version: "24.0.7"
-docker_compose_version: "2.23.0"
+app_name: "myapp"
+app_version: "latest"
 
-# Database
-db_name: devops_app
-db_user: appuser
-db_password: "{{ vault_db_password }}"  # будем шифровать
+# Directories
+app_dir: "/opt/{{ app_name }}"
+data_dir: "/var/lib/{{ app_name }}"
+log_dir: "/var/log/{{ app_name }}"
 
-# Vault
-vault_token: devroot
+# Network
+app_port: 3000
+internal_network: "myapp_backend"
+
+# Monitoring
+enable_monitoring: true
+grafana_admin_user: admin
+grafana_admin_password: "{{ vault_grafana_password }}"

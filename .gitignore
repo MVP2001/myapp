@@ -1,27 +1,25 @@
-# Binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-app/server
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Go workspace file
-go.work
-
-# Environment variables
+# Environment files
 .env
 .env.local
+.env.*.local
+
+# Secrets
+secrets/
+*.pem
+*.key
+.htpasswd
+
+# Data volumes
+letsencrypt/
+postgres_data/
+prometheus_data/
+grafana_data/
+loki_data/
+vault_data/
 
 # IDE
-.idea/
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
@@ -30,10 +28,11 @@ go.work
 .DS_Store
 Thumbs.db
 
-# Docker volumes
-postgres_data/
-
 # Logs
-logs/
 *.log
-.vault_pass
+logs/
+
+# Temporary
+tmp/
+temp/
+*.tmp

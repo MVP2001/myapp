@@ -1,0 +1,24 @@
+# Override for local development
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./app
+      target: builder
+    volumes:
+      - ./app:/app
+    environment:
+      - DEV_MODE=true
+    command: ["go", "run", "cmd/server/main.go"]
+
+  postgres:
+    ports:
+      - "5432:5432"
+
+  grafana:
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin

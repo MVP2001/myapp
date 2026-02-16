@@ -1,0 +1,10 @@
+---
+- name: restart app
+  command:
+    cmd: docker-compose restart
+    chdir: "{{ app_dir }}"
+
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted

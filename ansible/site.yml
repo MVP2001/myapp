@@ -1,8 +1,32 @@
 ---
 - name: Configure myapp server
-  hosts: production
+  hosts: all
   become: yes
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Check connectivity
+      ping:
+      
+    - name: Display deployment info
+      debug:
+        msg: "Deploying to {{ inventory_hostname }} ({{ deploy_env }})"
+
   roles:
     - common
     - docker
     - app
+
+  post_tasks:
+    - name: Verify deployment
+      uri:
+        url: "http://localhost:3000/health"
+        status_code: 200
+      register: health_check
+      retries: 5
+      delay: 10
+      until: health_check.status == 200
+      
+    - name: Deployment success
+      debug:
+        msg: "✅ Deployment successful! App is healthy."
