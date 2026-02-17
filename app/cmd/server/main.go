@@ -1,71 +1,60 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"test-app/internal/database"
 	"test-app/internal/handlers"
-	"test-app/internal/models"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	// 🔥 ДОБАВЛЕНО: Prometheus metrics
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/gofiber/adaptor/v2"
 )
 
-func initTracer() func() {
-	ctx := context.Background()
-
-	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpoint("jaeger:4318"),
-		otlptracehttp.WithInsecure(),
+// 🔥 ДОБАВЛЕНО: Кастомные метрики
+var (
+	httpRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
 	)
-	if err != nil {
-		log.Printf("Failed to create exporter: %v", err)
-		return func() {}
-	}
-
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName("myapp"),
-			attribute.String("environment", "production"),
-		)),
+	
+	httpRequestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "path"},
 	)
-	otel.SetTracerProvider(tp)
-
-	return func() {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		if err := tp.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down tracer: %v", err)
-		}
-	}
-}
+)
 
 func main() {
 	godotenv.Load()
-
-	// Инициализация трейсинга
-	cleanup := initTracer()
-	defer cleanup()
 
 	db, err := database.Connect()
 	if err != nil {
 		log.Fatal("Cannot connect to database:", err)
 	}
+	// 🔥 ДОБАВЛЕНО: Graceful shutdown для БД
+	defer func() {
+		sqlDB, err := db.DB()
+		if err == nil {
+			sqlDB.Close()
+			log.Println("Database connection closed")
+		}
+	}()
 
 	db.AutoMigrate(&models.Task{})
 
@@ -75,14 +64,39 @@ func main() {
 
 	app.Use(recover.New())
 	app.Use(logger.New())
-
-	// Метрики endpoint
-	app.Get("/metrics", func(c *fiber.Ctx) error {
-		return c.Status(200).SendString("metrics will be here")
+	
+	// 🔥 ДОБАВЛЕНО: Middleware для сбора метрик
+	app.Use(func(c *fiber.Ctx) error {
+		start := time.Now()
+		err := c.Next()
+		duration := time.Since(start).Seconds()
+		
+		status := c.Response().StatusCode()
+		httpRequestsTotal.WithLabelValues(c.Method(), c.Path(), string(rune(status))).Inc()
+		httpRequestDuration.WithLabelValues(c.Method(), c.Path()).Observe(duration)
+		
+		return err
 	})
+
+	// 🔥 ИСПРАВЛЕНО: Настоящий Prometheus endpoint
+	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	handlers.RegisterHealthHandlers(app)
 	handlers.RegisterTaskHandlers(app, db)
+
+	// 🔥 ДОБАВЛЕНО: Корневой endpoint (редирект на /health или API docs)
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"service": "DevOps App",
+			"version": "1.0",
+			"endpoints": fiber.Map{
+				"health":    "/health",
+				"ready":     "/ready",
+				"metrics":   "/metrics",
+				"api_tasks": "/api/tasks",
+			},
+		})
+	})
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
