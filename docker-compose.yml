@@ -67,7 +67,7 @@ services:
 
   app:
     build: ./app
-    container_name: devops-app
+    container_name: test-app
     # 🔥 УБРАНО: Прямой проброс порта (всё через Traefik)
     # ports:
     #   - "127.0.0.1:3000:3000"
