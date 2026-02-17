@@ -6,34 +6,40 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # 🔥 ДОБАВЛЕНО: Явно указываем сеть для Docker provider
+      - "--providers.docker.network=myapp_backend"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # 🔥 ДОБАВЛЕНО: Редирект HTTP → HTTPS
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      - "--entrypoints.web.http.redirections.entryPoint.permanent=true"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.email=mihailpodorets01@gmail.com"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--ping=true"
-      # 🔥 ДОБАВЛЕНО: Entrypoint для Traefik metrics
-      - "--entrypoints.traefik.address=:8080"
+      - "--log.level=DEBUG"
+      # 🔥 ДОБАВЛЕНО: API insecure для отладки (убрать в проде)
+      - "--api.insecure=true"
     ports:
       - "80:80"
       - "443:443"
+      # 🔥 ДОБАВЛЕНО: Временно открываем dashboard на порту 8080
+      - "8080:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # 🔥 ИСПРАВЛЕНО: Проверь, что путь правильный
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        read_only: true
       - ./letsencrypt:/letsencrypt
     networks:
       - backend
+    # 🔥 ДОБАВЛЕНО: Явно указываем сеть в labels
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=myapp_backend"
       - "traefik.http.routers.traefik.rule=Host(`traefik.mvp2001.ru`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      # 🔥 ДОБАВЛЕНО: Базовая авторизация для защиты дашборда (логин: admin, пароль: admin)
-      - "traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
-      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
     restart: unless-stopped
 
   postgres:
@@ -81,14 +87,18 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      # 🔥 ИСПРАВЛЕНО: Добавлен корневой домен + app поддомен
-      - "traefik.http.routers.app.rule=Host(`mvp2001.ru`) || Host(`app.mvp2001.ru`)"
-      - "traefik.http.routers.app.entrypoints=websecure"
-      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
-      - "traefik.http.services.app.loadbalancer.server.port=3000"
-      # 🔥 ДОБАВЛЕНО: Healthcheck для Traefik
-      - "traefik.http.services.app.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.app.loadbalancer.healthcheck.interval=10s"
+      # 🔥 ВАЖНО: Явно указываем сеть
+      - "traefik.docker.network=myapp_backend"
+      # 🔥 ИСПРАВЛЕНО: Два отдельных роутера вместо || (более стабильно)
+      - "traefik.http.routers.app-root.rule=Host(`mvp2001.ru`)"
+      - "traefik.http.routers.app-root.entrypoints=websecure"
+      - "traefik.http.routers.app-root.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.app-root.service=app-service"
+      - "traefik.http.routers.app-sub.rule=Host(`app.mvp2001.ru`)"
+      - "traefik.http.routers.app-sub.entrypoints=websecure"
+      - "traefik.http.routers.app-sub.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.app-sub.service=app-service"
+      - "traefik.http.services.app-service.loadbalancer.server.port=3000"
     restart: unless-stopped
 
   # 🔥 ДОБАВЛЕНО: PostgreSQL Exporter (был в prometheus.yml, но не в compose)
