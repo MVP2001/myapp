@@ -6,114 +6,151 @@ services:
       - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
-      # 🔥 ДОБАВЛЕНО: Явно указываем сеть для Docker provider
-      - "--providers.docker.network=myapp_backend"
       - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.email=mihailpodorets01@gmail.com"
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-      - "--log.level=DEBUG"
-      # 🔥 ДОБАВЛЕНО: API insecure для отладки (убрать в проде)
-      - "--api.insecure=true"
+      - "--ping=true"
+      - "--log.level=INFO"
     ports:
       - "80:80"
       - "443:443"
-      # 🔥 ДОБАВЛЕНО: Временно открываем dashboard на порту 8080
-      - "8080:8080"
     volumes:
-      # 🔥 ИСПРАВЛЕНО: Проверь, что путь правильный
-      - type: bind
-        source: /var/run/docker.sock
-        target: /var/run/docker.sock
-        read_only: true
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./letsencrypt:/letsencrypt
     networks:
       - backend
-    # 🔥 ДОБАВЛЕНО: Явно указываем сеть в labels
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=myapp_backend"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.mvp2001.ru`)"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN}`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
   postgres:
     image: postgres:15-alpine
     container_name: devops-postgres
     environment:
-      POSTGRES_DB: devops_app
-      POSTGRES_USER: appuser
-      # 🔥 ИЗМЕНЕНО: Используем переменную окружения из .env
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password
     secrets:
       - db_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U appuser -d devops_app"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   app:
     build: ./app
-    container_name: test-app
-    # 🔥 УБРАНО: Прямой проброс порта (всё через Traefik)
-    # ports:
-    #   - "127.0.0.1:3000:3000"
+    container_name: devops-app
     environment:
       PORT: 3000
       HOST: 0.0.0.0
-      # 🔥 ДОБАВЛЕНО: Строка подключения к БД
-      DATABASE_URL: postgres://appuser:secretpassword123@postgres:5432/devops_app?sslmode=disable
-      VAULT_ADDR: http://vault:8200
-      VAULT_TOKEN_FILE: /run/secrets/vault_token
+      APP_ENV: ${APP_ENV:-production}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      JAEGER_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     secrets:
-      - vault_token
+      - db_password
     depends_on:
       postgres:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     networks:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     labels:
       - "traefik.enable=true"
-      # 🔥 ВАЖНО: Явно указываем сеть
-      - "traefik.docker.network=myapp_backend"
-      # 🔥 ИСПРАВЛЕНО: Два отдельных роутера вместо || (более стабильно)
-      - "traefik.http.routers.app-root.rule=Host(`mvp2001.ru`)"
-      - "traefik.http.routers.app-root.entrypoints=websecure"
-      - "traefik.http.routers.app-root.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.app-root.service=app-service"
-      - "traefik.http.routers.app-sub.rule=Host(`app.mvp2001.ru`)"
-      - "traefik.http.routers.app-sub.entrypoints=websecure"
-      - "traefik.http.routers.app-sub.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.app-sub.service=app-service"
-      - "traefik.http.services.app-service.loadbalancer.server.port=3000"
+      - "traefik.http.routers.app.rule=Host(`app.${DOMAIN}`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.app.loadbalancer.server.port=3000"
+      - "traefik.http.services.app.loadbalancer.healthcheck.path=/health"
+      - "traefik.http.services.app.loadbalancer.healthcheck.interval=10s"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
 
-  # 🔥 ДОБАВЛЕНО: PostgreSQL Exporter (был в prometheus.yml, но не в compose)
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://appuser:secretpassword123@postgres:5432/devops_app?sslmode=disable"
+      DATA_SOURCE_NAME_FILE: /run/secrets/postgres_exporter_dsn
+    secrets:
+      - postgres_exporter_dsn
     networks:
       - backend
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jaeger.rule=Host(`jaeger.${DOMAIN}`)"
+      - "traefik.http.routers.jaeger.entrypoints=websecure"
+      - "traefik.http.routers.jaeger.tls.certresolver=letsencrypt"
+      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -124,22 +161,24 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
     networks:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.prometheus.rule=Host(`prometheus.mvp2001.ru`)"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.${DOMAIN}`)"
       - "traefik.http.routers.prometheus.entrypoints=websecure"
       - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
-      # 🔥 ДОБАВЛЕНО: Базовая авторизация
-      - "traefik.http.middlewares.prometheus-auth.basicauth.users=admin:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/"
-      - "traefik.http.routers.prometheus.middlewares=prometheus-auth"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
 
   grafana:
     image: grafana/grafana:10.2.3
@@ -148,63 +187,33 @@ services:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana:/etc/grafana/provisioning
     environment:
-      - GF_SECURITY_ADMIN_USER__FILE=/run/secrets/grafana_admin_user
-      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=https://grafana.mvp2001.ru
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
     secrets:
-      - grafana_admin_user
-      - grafana_admin_password
+      - grafana_password
     networks:
       - backend
+    depends_on:
+      - prometheus
+      - loki
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.mvp2001.ru`)"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=websecure"
       - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     restart: unless-stopped
-
-  node-exporter:
-    image: prom/node-exporter:v1.7.0
-    container_name: node-exporter
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.rootfs=/rootfs'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    networks:
-      - backend
-    labels:
-      - "traefik.enable=false"
-    restart: unless-stopped
-
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.47.2
-    container_name: cadvisor
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    networks:
-      - backend
-    labels:
-      - "traefik.enable=false"
-    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   loki:
     image: grafana/loki:2.9.0
     container_name: loki
-    ports:
-      - "127.0.0.1:3100:3100"  # 🔥 ИЗМЕНЕНО: Только localhost
     volumes:
       - ./monitoring/loki:/etc/loki
       - loki_data:/loki
@@ -214,6 +223,11 @@ services:
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -231,47 +245,12 @@ services:
       - "traefik.enable=false"
     restart: unless-stopped
 
-  # 🔥 ДОБАВЛЕНО: Jaeger (был в README, но не в compose)
-  jaeger:
-    image: jaegertracing/all-in-one:1.50
-    container_name: jaeger
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    networks:
-      - backend
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.jaeger.rule=Host(`jaeger.mvp2001.ru`)"
-      - "traefik.http.routers.jaeger.entrypoints=websecure"
-      - "traefik.http.routers.jaeger.tls.certresolver=letsencrypt"
-      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
-    restart: unless-stopped
-
-  # 🔥 ДОБАВЛЕНО: Vault в production-режиме (не dev)
-  vault:
-    image: hashicorp/vault:1.15
-    container_name: vault
-    cap_add:
-      - IPC_LOCK
-    environment:
-      - VAULT_ADDR=http://0.0.0.0:8200
-    volumes:
-      - vault_data:/vault/file
-      - ./vault/config:/vault/config
-    command: server -config=/vault/config/vault.hcl
-    networks:
-      - backend
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.vault.rule=Host(`vault.mvp2001.ru`)"
-      - "traefik.http.routers.vault.entrypoints=websecure"
-      - "traefik.http.routers.vault.tls.certresolver=letsencrypt"
-      - "traefik.http.services.vault.loadbalancer.server.port=8200"
-    restart: unless-stopped
-
 networks:
   backend:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
@@ -279,15 +258,11 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
-  vault_data:
 
-# 🔥 ДОБАВЛЕНО: Docker Secrets для безопасности
 secrets:
   db_password:
     file: ./secrets/db_password.txt
-  grafana_admin_user:
-    file: ./secrets/grafana_admin_user.txt
-  grafana_admin_password:
-    file: ./secrets/grafana_admin_password.txt
-  vault_token:
-    file: ./secrets/vault_token.txt
+  postgres_exporter_dsn:
+    file: ./secrets/postgres_exporter_dsn.txt
+  grafana_password:
+    file: ./secrets/grafana_password.txt
