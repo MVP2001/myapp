@@ -1,36 +1,24 @@
 # Этап сборки
-FROM golang:1.24-alpine AS builder
+FROM mirror.gcr.io/library/golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-# Устанавливаем зависимости для сборки
-RUN apk add --no-cache git
+RUN apk add --no-cache git ca-certificates tzdata
 
-# Копируем модули и скачиваем зависимости
-COPY go.mod go.sum ./
-RUN go mod download
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
 
-# Копируем код
+COPY go.mod ./
 COPY . .
 
 RUN go mod tidy
+RUN go mod download
 
-# Собираем бинарник (включая миграции)
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main.go
 
-# Этап выполнения (минимальный образ)
 FROM alpine:latest
-
 WORKDIR /root/
-
-# Устанавливаем сертификаты для HTTPS
-RUN apk --no-cache add ca-certificates
-
-# Копируем бинарник из этапа сборки
+RUN apk --no-cache add ca-certificates tzdata
 COPY --from=builder /app/server .
-
-# Открываем порт
 EXPOSE 3000
-
-# Запускаем
 CMD ["./server"]

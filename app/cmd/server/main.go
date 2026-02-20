@@ -11,7 +11,7 @@ import (
 	"test-app/internal/database"
 	"test-app/internal/handlers"
 
-	"github.com/gofiber/contrib/fiberprometheus"
+	"github.com/ansrivas/fiberprometheus/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
