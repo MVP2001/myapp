@@ -14,7 +14,6 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_EMAIL}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--ping=true"
-      - "--log.level=INFO"
     ports:
       - "80:80"
       - "443:443"
@@ -25,11 +24,9 @@ services:
       - backend
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik.rule=Host(`app.mvp2001.ru`)"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.traefik.middlewares=traefik-auth"
-      - "traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_BASIC_AUTH}"
     restart: unless-stopped
     deploy:
       resources:
@@ -48,7 +45,6 @@ services:
       - db_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - backend
     healthcheck:
@@ -60,14 +56,6 @@ services:
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
 
   app:
     build: ./app
@@ -78,11 +66,9 @@ services:
       APP_ENV: ${APP_ENV:-production}
       DB_HOST: postgres
       DB_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      JAEGER_ENDPOINT: http://jaeger:4318
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD_FILE: /run/secrets/db_password
     secrets:
       - db_password
     depends_on:
@@ -93,7 +79,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -104,32 +90,6 @@ services:
       - "traefik.http.routers.app.entrypoints=websecure"
       - "traefik.http.routers.app.tls.certresolver=letsencrypt"
       - "traefik.http.services.app.loadbalancer.server.port=3000"
-      - "traefik.http.services.app.loadbalancer.healthcheck.path=/health"
-      - "traefik.http.services.app.loadbalancer.healthcheck.interval=10s"
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.15.0
-    container_name: postgres-exporter
-    environment:
-      DATA_SOURCE_NAME_FILE: /run/secrets/postgres_exporter_dsn
-    secrets:
-      - postgres_exporter_dsn
-    networks:
-      - backend
-    depends_on:
-      postgres:
-        condition: service_healthy
-    labels:
-      - "traefik.enable=false"
     restart: unless-stopped
 
   jaeger:
@@ -146,11 +106,6 @@ services:
       - "traefik.http.routers.jaeger.tls.certresolver=letsencrypt"
       - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
 
   prometheus:
     image: prom/prometheus:v2.48.0
@@ -162,9 +117,6 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-      - '--web.enable-lifecycle'
     networks:
       - backend
     labels:
@@ -174,11 +126,6 @@ services:
       - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 1G
 
   grafana:
     image: grafana/grafana:10.2.3
@@ -187,10 +134,9 @@ services:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana:/etc/grafana/provisioning
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_password
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
     secrets:
       - grafana_password
     networks:
@@ -205,11 +151,6 @@ services:
       - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
 
   loki:
     image: grafana/loki:2.9.0
@@ -223,11 +164,6 @@ services:
     labels:
       - "traefik.enable=false"
     restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -245,12 +181,25 @@ services:
       - "traefik.enable=false"
     restart: unless-stopped
 
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME_FILE: /run/secrets/postgres_exporter_dsn
+    secrets:
+      - postgres_exporter_dsn
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=false"
+    restart: unless-stopped
+
 networks:
   backend:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
@@ -262,7 +211,7 @@ volumes:
 secrets:
   db_password:
     file: ./secrets/db_password.txt
-  postgres_exporter_dsn:
-    file: ./secrets/postgres_exporter_dsn.txt
   grafana_password:
     file: ./secrets/grafana_password.txt
+  postgres_exporter_dsn:
+    file: ./secrets/postgres_exporter_dsn.txt

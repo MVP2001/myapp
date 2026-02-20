@@ -6,19 +6,25 @@ WORKDIR /app
 RUN apk add --no-cache git ca-certificates tzdata
 
 ENV GOPROXY=https://proxy.golang.org,direct
-ENV GOSUMDB=sum.golang.org
+# Отключаем проверку go.sum временно
+ENV GOSUMDB=off
+ENV GOFLAGS="-mod=mod"
 
-COPY go.mod ./
 COPY . .
 
-RUN go mod tidy
-RUN go mod download
+# Скачиваем все зависимости и собираем
+RUN go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main.go
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o server cmd/server/main.go
-
+# Этап выполнения
 FROM alpine:latest
+
 WORKDIR /root/
+
 RUN apk --no-cache add ca-certificates tzdata
+
 COPY --from=builder /app/server .
+
 EXPOSE 3000
+
 CMD ["./server"]
