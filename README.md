@@ -1,62 +1,142 @@
-📋 Проект портфолио DevOps-инженера | MyApp — Production-Ready платформа
-GitHub: github.com/MVP2001/myapp | Стек: Go, Kubernetes, Terraform, Ansible, Yandex Cloud
-🎯 Описание проекта
-Спроектировал и внедрил промышленную контейнеризированную платформу, демонстрирующую сквозные DevOps-практики: от provisioning инфраструктуры до автоматизированных пайплайнов деплоя и комплексной observability. Разработан как портфельный проект для освоения современных cloud-native инструментов и демонстрации экспертизы в построении надёжных, масштабируемых и безопасных систем.
-🏗️ Архитектура и инфраструктура
-Table
-Компонент	Реализация	Назначение
-Облако	Yandex Cloud (Terraform)	IaC с модульной VPC, провижининг VM, S3-бэкенд для state
-Оркестрация	Kubernetes + Helm + Kustomize	GitOps-готовые деплои с оверлеями окружений
-Сеть	Traefik (ingress + SSL)	Автоматический HTTPS через Let's Encrypt, reverse proxy
-Секреты	HashiCorp Vault + Docker Secrets	Безопасное управление credentials во всех окружениях
-🔄 CI/CD Pipeline (GitHub Actions)
+# MyApp — Production-Ready DevOps Platform
+
+[![CI/CD](https://github.com/MVP2001/myapp/actions/workflows/ci.yml/badge.svg)](https://github.com/MVP2001/myapp/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/badge/go-1.24-blue)](https://golang.org)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+> Промышленная контейнеризированная платформа с полным циклом DevOps-практик: 
+> от инфраструктуры как кода до комплексной observability и автоматизированных деплоев.
+
+![Architecture](docs/architecture.png)
+
+## 🎯 Возможности
+
+- **🚀 CI/CD Pipeline** — автоматизированная сборка, тестирование и деплой
+- **🏗️ Infrastructure as Code** — Terraform + Ansible для Yandex Cloud
+- **☸️ Kubernetes-Ready** — Helm-чарт и Kustomize-оверлеи
+- **📊 Observability Stack** — Prometheus, Grafana, Loki, Jaeger
+- **🔒 Security First** — Vault, сканирование уязвимостей, secrets management
+- **🌐 Автоматический HTTPS** — Let's Encrypt через Traefik
+
+## 🏗️ Архитектура
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Traefik   │────▶│  Go App     │────▶│  PostgreSQL │
+│ (SSL/Proxy) │     │  (Fiber)    │     │             │
+└─────────────┘     └──────┬──────┘     └─────────────┘
+│
+┌──────────────────┼──────────────────┐
+▼                  ▼                  ▼
+┌─────────┐      ┌─────────┐       ┌──────────┐
+│Prometheus│      │  Loki   │       │  Jaeger  │
+│(Metrics)│      │ (Logs)  │       │ (Traces) │
+└────┬────┘      └────┬────┘       └──────────┘
+│                │
+└────────────────┘
+│
+▼
+┌─────────────┐
+│   Grafana   │
+│ (Dashboards)│
+└─────────────┘
 plain
 Copy
-Push в develop/main
-    ↓
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  Тесты и Lint   │ → │  Сканирование   │ → │  Сборка и пуш   │
-│  (Go, race det) │   │ (Trivy, govuln) │   │ (multi-arch)    │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
-                                                    ↓
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  Health Check   │ ← │  Деплой (SSH)   │ ← │  Staging/Prod   │
-│  Проверка       │   │  Ansible/Docker │   │  Окружение      │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
-Ключевые возможности:
-Многоступенчатые сборки с кэшированием слоёв
-Автоматическое сканирование уязвимостей (контейнеры + зависимости)
-Параллельное выполнение jobs с передачей артефактов
-Gates деплоя на основе окружений
-📊 Стек наблюдаемости (Observability)
+
+## 🚀 Быстрый старт
+
+### Локальный запуск
+
+```bash
+# Клонирование
+git clone https://github.com/MVP2001/myapp.git
+cd myapp
+
+# Настройка окружения
+cp .env.example .env
+# Отредактируй .env под свои нужды
+
+# Запуск
+make up
+
+# Проверка статуса
+make status
+Доступные сервисы (после запуска)
 Table
-Уровень	Инструмент	Собираемые метрики/логи
-Метрики	Prometheus + Alertmanager	RPS приложения, latency, error rate, подключения к БД, node exporter
-Логи	Loki + Promtail	Структурированные логи контейнеров с корреляцией трейсов
-Трейсинг	Jaeger + OpenTelemetry	Распределённый трейсинг запросов между сервисами
-Визуализация	Grafana	Единые дашборды с авто-провижинингом datasource
-Правила алертинга: CPU >80%, Memory >85%, Error rate >10%, DB connections >80, Instance down
-🔒 Реализация безопасности
-Секреты: Интеграция Vault с fallback на Docker secrets (никаких hardcoded credentials)
-Сканирование: Trivy (контейнеры/файловая система), govulncheck (Go-уязвимости), golangci-lint
-Сеть: TLS 1.3 через Let's Encrypt, изоляция internal service mesh
-Compliance: Non-root контейнеры, read-only filesystems, resource limits
-🚀 Ключевые достижения
-Table
-Метрика	Результат
-Частота деплоев	На каждый push в main (полностью автоматизировано)
-Lead time изменений	<5 минут (сборка → деплой → health check)
-Время восстановления	Автоматический rollback при падении health check
-Провижининг инфраструктуры	<3 минуты (terraform apply)
-Покрытие тестами	Race detection + unit-тесты в CI
-🛠️ Инструменты и технологии
+Сервис	URL	Описание
+App	http://localhost:3000	REST API приложения
+Health	http://localhost:3000/health	Проверка здоровья
+Metrics	http://localhost:3000/metrics	Prometheus-метрики
+Traefik	http://localhost:8080	Dashboard прокси
+Grafana	http://localhost:3001	Визуализация метрик
+Prometheus	http://localhost:9090	Сбор метрик
+Jaeger	http://localhost:16686	Distributed tracing
+🛠️ Стек технологий
+Backend
+Go 1.24 — основной язык
+Fiber — HTTP-фреймворк
+GORM — ORM для PostgreSQL
+OpenTelemetry — distributed tracing
+Инфраструктура
+Terraform — IaC для Yandex Cloud
+Ansible — configuration management
+Docker — контейнеризация
+Docker Compose — локальная оркестрация
+Kubernetes
+Kustomize — управление манифестами
+Helm — пакетный менеджер
+Traefik — ingress controller
+Observability
+Prometheus — метрики и алертинг
+Grafana — дашборды
+Loki — агрегация логов
+Promtail — сбор логов
+Jaeger — distributed tracing
+CI/CD & Security
+GitHub Actions — автоматизация пайплайнов
+Trivy — сканирование уязвимостей
+Vault — управление секретами
+golangci-lint — статический анализ
+📁 Структура проекта
 plain
 Copy
-Инфраструктура:     Terraform, Ansible, Yandex Cloud, Docker, Docker Compose
-Оркестрация:        Kubernetes, Helm, Kustomize, Traefik
-CI/CD:              GitHub Actions, Make
-Наблюдаемость:      Prometheus, Grafana, Loki, Jaeger, OpenTelemetry
-Безопасность:       Vault, Trivy, SOPS (в планах)
-Языки:              Go (Fiber, GORM), Bash, HCL, YAML
-💡 Почему этот проект важен
-Разработан с нуля для решения реальных операционных задач: zero-downtime деплои, ротация секретов без рестартов, горизонтальное масштабирование через HPA, и реагирование на инциденты с actionable алертами. Каждый компонент выбран для соответствия enterprise-grade сетапам при сохранении cost-effectiveness для персональной инфраструктуры.
+myapp/
+├── app/                    # Go-приложение
+│   ├── cmd/server/         # Entry point
+│   ├── internal/           # handlers, models, database
+│   └── Dockerfile          # Multi-stage build
+├── ansible/                # Configuration management
+├── k8s/                    # Kubernetes манифесты (Kustomize)
+├── myapp-chart/            # Helm chart
+├── monitoring/             # Observability конфиги
+├── terraform/              # IaC (Yandex Cloud)
+├── scripts/                # Автоматизация
+└── docker-compose.yml      # Локальный запуск
+🔄 CI/CD Pipeline
+yaml
+Copy
+Push/PR
+  ├── Test (Go tests + race detection)
+  ├── Lint (golangci-lint)
+  ├── Security (Trivy + govulncheck)
+  ├── Build (multi-arch Docker image)
+  └── Deploy (staging/production)
+📊 Мониторинг и алертинг
+Метрики приложения
+http_requests_total — количество запросов
+http_request_duration_seconds — latency
+http_requests_active — активные соединения
+Алерты (Prometheus)
+InstanceDown — инстанс недоступен >1 мин
+HighCPUUsage — CPU >80% >5 мин
+HighMemoryUsage — Memory >85% >5 мин
+HighErrorRate — Error rate >10% >2 мин
+SlowRequests — P95 latency >1 сек >5 мин
+Дашборды Grafana
+Application Overview — основные метрики приложения
+System Metrics — CPU, Memory, Network
+Database Metrics — PostgreSQL connections, queries
+Logs — интеграция с Loki
+🔒 Безопасность
+Секреты — Vault integration + Docker secrets (никаких hardcoded паролей)
+Сканирование — Trivy для контейнеров и файловой системы
+Сеть — TLS 1.3 через Let's Encrypt, изоляция сервисов
+Контейнеры — non-root пользователи, read-only filesystem
